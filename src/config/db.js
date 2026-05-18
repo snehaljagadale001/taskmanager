@@ -13,7 +13,7 @@ const initDB = async () => {
     console.log('Database connected successfully');
     client.release();
   } catch (err) {
-    console.error(err);
+    console.error('DB init failed:', err);
     throw err;
   }
 };
