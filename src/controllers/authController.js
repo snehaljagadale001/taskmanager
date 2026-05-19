@@ -4,61 +4,168 @@ const { pool } = require('../config/db');
 
 const register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
-    const existing = await pool.query('SELECT id FROM users WHERE email=$1', [email]);
-    if (existing.rows.length > 0) return res.status(409).json({ message: 'Email already registered' });
+    const { name, email, password } = req.body;
+
+    const existing = await pool.query(
+      'SELECT id FROM users WHERE email=$1',
+      [email]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(409).json({
+        message: 'Email already registered'
+      });
+    }
 
     const hashed = await bcrypt.hash(password, 10);
-    const userRole = role || 'user';
 
     const result = await pool.query(
       'INSERT INTO users (name, email, password, role) VALUES ($1,$2,$3,$4) RETURNING id, name, email, role',
-      [name, email, hashed, userRole]
+      [name, email, hashed, 'user']  // role is always 'user' — admin is env-only
     );
-    res.status(201).json({ message: 'User registered', user: result.rows[0] });
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: result.rows[0]
+    });
+
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+    res.status(500).json({
+      message: 'Server error',
+      error: err.message
+    });
   }
 };
 
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const result = await pool.query('SELECT * FROM users WHERE email=$1', [email]);
-    if (result.rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
+
+    // FIXED ADMIN LOGIN
+    if (
+      email === process.env.ADMIN_EMAIL &&
+      password === process.env.ADMIN_PASSWORD
+    ) {
+      const token = jwt.sign(
+        {
+          id: 0,
+          name: process.env.ADMIN_NAME,
+          email: process.env.ADMIN_EMAIL,
+          role: 'admin'
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      return res.json({
+        message: 'Admin login successful',
+        token,
+        user: {
+          id: 0,
+          name: process.env.ADMIN_NAME,
+          email: process.env.ADMIN_EMAIL,
+          role: 'admin'
+        }
+      });
+    }
+
+    // NORMAL USER LOGIN
+    const result = await pool.query(
+      'SELECT * FROM users WHERE email=$1',
+      [email]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        message: 'Invalid credentials'
+      });
+    }
 
     const user = result.rows[0];
+
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ message: 'Invalid credentials' });
+
+    if (!match) {
+      return res.status(401).json({
+        message: 'Invalid credentials'
+      });
+    }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name
+      },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.json({ message: 'Login successful', token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+    res.status(500).json({
+      message: 'Server error',
+      error: err.message
+    });
   }
 };
 
 const getProfile = async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email, role, created_at FROM users WHERE id=$1', [req.user.id]);
+
+    if (req.user.role === 'admin') {
+      return res.json({
+        id: 0,
+        name: process.env.ADMIN_NAME,
+        email: process.env.ADMIN_EMAIL,
+        role: 'admin'
+      });
+    }
+
+    const result = await pool.query(
+      'SELECT id, name, email, role, created_at FROM users WHERE id=$1',
+      [req.user.id]
+    );
+
     res.json(result.rows[0]);
+
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({
+      message: 'Server error'
+    });
   }
 };
 
 const getAllUsers = async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC');
+
+    const result = await pool.query(
+      'SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC'
+    );
+
     res.json(result.rows);
+
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({
+      message: 'Server error'
+    });
   }
 };
 
-module.exports = { register, login, getProfile, getAllUsers };
+module.exports = {
+  register,
+  login,
+  getProfile,
+  getAllUsers
+};

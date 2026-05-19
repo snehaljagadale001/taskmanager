@@ -117,12 +117,7 @@
       <label>Email</label>
       <input type="email" id="regEmail">
       <label>Password</label>
-      <input type="password" id="regPass" >
-      <label>Role</label>
-      <select id="regRole">
-        <option value="user">User</option>
-        <option value="admin">Admin</option>
-      </select>
+      <input type="password" id="regPass">
       <button class="btn" onclick="register()">Create Account</button>
       <div id="registerMsg"></div>
     </div>
@@ -258,11 +253,10 @@ async function register() {
   const name = document.getElementById('regName').value;
   const email = document.getElementById('regEmail').value;
   const password = document.getElementById('regPass').value;
-  const role = document.getElementById('regRole').value;
   try {
     const res = await fetch(`${API}/api/auth/register`, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ name, email, password, role })
+      body: JSON.stringify({ name, email, password })
     });
     const data = await res.json();
     if (!res.ok) return showMsg('registerMsg', data.errors?.[0]?.msg || data.message, 'error');
